@@ -189,8 +189,11 @@ def process_modules(
         get_auth: the auth function to use.
 
     Returns:
-        the result of the hub_repo. Mainly used for tests.
+        A tuple of:
+        - The result of the hub_repo. Mainly used for tests.
+        - The kwargs to pass to extension_metadata.
     """
+    extension_metadata = {}
 
     # default values to apply for version specific config
     defaults = {
@@ -283,7 +286,7 @@ def process_modules(
             )
 
     if not versions:
-        return hub_repo(
+        repo = hub_repo(
             name = hub_name,
             toolchain_type = toolchain_type,
             toolchain_names = ["none"],
@@ -296,6 +299,7 @@ def process_modules(
             },
             toolchain_target_settings = {},
         )
+        return (repo, extension_metadata)
 
     toolchain_names = []
     toolchain_implementations = {}
@@ -358,7 +362,7 @@ def process_modules(
                     for label in platform.target_settings
                 ]
 
-    return hub_repo(
+    repo = hub_repo(
         name = hub_name,
         toolchain_type = toolchain_type,
         toolchain_names = toolchain_names,
@@ -366,12 +370,14 @@ def process_modules(
         toolchain_compatible_with = toolchain_compatible_with_by_toolchain,
         toolchain_target_settings = toolchain_target_settings,
     )
+    return (repo, extension_metadata)
 
 def _uv_toolchain_extension(module_ctx):
-    process_modules(
+    _, extension_metadata = process_modules(
         module_ctx,
         hub_name = "uv",
     )
+    return module_ctx.extension_metadata(**extension_metadata)
 
 def _overlap(first_collection, second_collection):
     for x in first_collection:
@@ -465,16 +471,20 @@ def _get_tool_urls_from_dist_manifest(module_ctx, *, base_url, manifest_filename
                     "aarch64-apple-darwin"
                 ]
     """
+    facts = getattr(module_ctx, "facts", None)
+    print(facts)
     auth_attr = struct(**auth_attrs)
     dist_manifest = module_ctx.path(manifest_filename)
     urls = [base_url + "/" + manifest_filename]
     result = module_ctx.download(
         url = urls,
+        # sha256sum = XXX,
         output = dist_manifest,
         auth = get_auth(module_ctx, urls, ctx_attr = auth_attr),
     )
     if not result.success:
         fail(result)
+    # XXX result.integrity
     dist_manifest = json.decode(module_ctx.read(dist_manifest))
 
     # Use the simple download_url from the manifest, when available.
